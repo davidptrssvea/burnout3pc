@@ -39,3 +39,16 @@ Validation:
 Local replay tests use a private configuration and no personal memory card.
 User listening confirmation is still useful; other tracks/audio-output modes
 have not been exhaustively playtested.
+
+Follow-up investigation after the failed user listening test (2026-10-14):
+- Pause Audio looks up the boostloop and fire loops in loaded race banks.
+- Front-end Audio uses a different dedicated left/right preview from fe.awd.
+- The two paused-preview ADPCM buffers captured in SPU RAM match their full
+  source buffers on the owned ISO byte for byte (34,448 and 14,864 bytes).
+  No overwritten or damaged sample bytes were found in this test.
+- Redirecting playback to the front-end routine alone is silent: its bank
+  is absent during a race. Loading that bank alongside race audio did not
+  return a usable bank, including a bounded retry experiment. Rejected.
+- These findings do not establish the cause of the objectionable sound.
+  The main source and installed executable retain edition 1's muted pause
+  preview workaround. No further candidate has been installed or released.
