@@ -33,3 +33,14 @@ front-end Audio replay. Preview voice levels settled at the native targets:
 The 303–310 s preview remained audible (RMS 11433.50); final clipped samples
 fell from 647 to 13 of 672000. Small remaining loud transients are not claimed
 fixed. Other tracks and output modes have not been exhaustively playtested.
+
+## Complete GIF quadwords
+
+[Performance and regression results](GIF-PERFORMANCE.md) document the new packet
+assembly fast path, a clean native before/after race check, and its limits.
+
+## Independent pause-preview observation
+
+David reports the same objectionable in-race Audio demonstration in PCSX2
+with the game. This weakens the earlier attribution to this port. The pause
+preview remains muted; no new mixer correction is claimed.

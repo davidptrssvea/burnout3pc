@@ -4,7 +4,7 @@ Personal Windows fork of [Daniel Gomes Vieira's Burnout 3 PC port](https://githu
 
 Requires your own **NTSC-U SLUS-21050** Burnout 3: Takedown disc image. Game images, extracted assets, generated game code, BIOS files, texture packs and personal saves are excluded. Unofficial fan project, unaffiliated with EA or Criterion.
 
-Current `main` restores edition 1's muted pause-preview workaround. The audible fault in experimental edition 2 remains under investigation.
+Current `main` keeps the objectionable pause preview muted. David also reproduced that sound in PCSX2. Experimental edition 2 re-enables it and is not recommended.
 
 ## Changes
 
@@ -12,7 +12,7 @@ Current `main` restores edition 1's muted pause-preview workaround. The audible 
 - Runtime-generated Xbox prompts following the selected mapping.
 - English Windows settings app, FXAA and anisotropic filtering at 2x/4x/8x/16x.
 - FPS display on **F10**, replacing the upstream F10 HUD-editor binding.
-- More efficient anisotropic filtering, draw bounds and VU calculations. Performance depends on hardware and scene.
+- More efficient anisotropic filtering, draw bounds, VU calculations and GIF packet handling. Performance depends on hardware and scene.
 - Own-car engine audio fixes, including SPU2 capture/PCM routing and audio instruction translation.
 - **OWN ENGINE** volume in pause → Audio, 0–200%, saved separately from Effects Volume.
 - Experimental pause Audio interpolation correction: native ramps settle at the sound driver's requested level, but user playtesting still reports badly distorted preview audio. Edition 2 re-enables that preview; **use edition 1's muted-preview workaround** while investigation continues.

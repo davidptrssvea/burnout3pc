@@ -310,6 +310,44 @@ void GsLayoutsArePermutations() {
     Check(std::memcmp(one->data(), run->data(), 4u << 20) == 0, "GS row runs store as single pixels do");
 }
 
+void GsTakesRegisterPacketsInBlocks() {
+    using namespace ps2host::gs;
+    std::vector<u32> words;
+    auto quad = [&](u64 low, u64 high) {
+        words.insert(words.end(), {u32(low), u32(low >> 32), u32(high), u32(high >> 32)});
+    };
+    quad(3ull | 1ull << 60, 0xE); // PACKED A+D: configure a 64-pixel target.
+    quad(1ull << 16, 0x4C);
+    quad(63ull << 16 | 63ull << 48, 0x40);
+    quad(6, 0x00);
+    quad(1ull | 1ull << 58 | 3ull << 60, 0x551); // odd REGLIST, with padding.
+    quad(0x80402010, 4ull << 4 | (4ull << 4) << 16);
+    quad(8ull << 4 | (6ull << 4) << 16, ~0ull);
+    quad(0, 0); // empty tag, then another PACKED sprite.
+    quad(2ull | 2ull << 60, 0x51);
+    quad(0x10ull | 0x20ull << 32, 0x40ull | 0x80ull << 32);
+    quad(10ull << 4 | (10ull << 4) << 32, 0);
+    quad(0x10ull | 0x20ull << 32, 0x40ull | 0x80ull << 32);
+    quad(14ull << 4 | (12ull << 4) << 32, 0);
+    auto reference = std::make_unique<Gs>();
+    for (u32 word : words) reference->Word(3, word);
+    reference->Finish();
+    Check(reference->primitives() == 2, "mixed GIF fixture draws two sprites");
+    for (u32 chunk = 1; chunk <= 19; ++chunk) {
+        auto blocks = std::make_unique<Gs>();
+        for (u32 i = 0; i < words.size();) {
+            const u32 n = std::min(chunk, u32(words.size()) - i);
+            blocks->Words(3, words.data() + i, n);
+            i += n;
+        }
+        blocks->Finish();
+        Check(blocks->Summary() == reference->Summary() &&
+              blocks->primitives() == reference->primitives() &&
+              std::memcmp(blocks->memory.data(), reference->memory.data(), 4u << 20) == 0,
+              "batched and fragmented register packets match single words");
+    }
+}
+
 void GsDrawsASprite() {
     using namespace ps2host::gs;
     Gs gs;
@@ -1437,6 +1475,7 @@ int main() {
     GsKeepsAFlatDepthExact();
     GsFillsTopLeft();
     GsTakesImagesInBlocks();
+    GsTakesRegisterPacketsInBlocks();
     TexturePackNamesAsPcsx2();
 #if PS2HOST_VULKAN
     GpuMemorySwizzlesAsTheGs();
