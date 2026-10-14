@@ -15,6 +15,10 @@ A pre-existing intermittent native host-test process failure (`0xC0000409`, no o
 
 ## Pause-preview interpolation correction (Xbox edition 2)
 
+**Follow-up:** user listening confirms that the preview remains badly distorted.
+The measurements below establish improved interpolation, not restored sound
+quality. Edition 1 is recommended while the audio data path is investigated.
+
 The suppression above describes edition 1. Edition 2 restores the native
 preview functions and supplies the RWA driver's requested sweep endpoints while
 pause Audio is open. Its ~33 ms polling interval otherwise lets ~10 ms ramps

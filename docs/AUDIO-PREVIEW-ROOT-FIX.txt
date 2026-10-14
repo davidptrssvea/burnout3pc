@@ -1,5 +1,10 @@
 Burnout 3 - pause Audio preview interpolation correction (2026-10-14)
 
+STATUS: USER PLAYTESTING CONFIRMS THE PREVIEW STILL SOUNDS BAD.
+The volume measurements below demonstrate a narrower interpolation improvement,
+not a solution to the audible problem. The local installation has been reverted
+to edition 1's muted pause-preview workaround pending further investigation.
+
 Diagnosis:
 RWA's native current-volume polling occurs roughly every 33 ms in pause Audio.
 Its linear volume ramps reach the requested level in about 10 ms. With delayed
