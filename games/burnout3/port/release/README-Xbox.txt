@@ -50,7 +50,7 @@ that file with the new Settings.exe renamed to Inställningar.exe, or use
 the included Settings.cmd launcher.
 
 SOURCE AND LICENCES
-https://github.com/davidptrssvea/burnout3pc (private repository)
+https://github.com/davidptrssvea/burnout3pc
 Based on Daniel Gomes Vieira's MIT-licensed burnout3-pc and ps2-port-engine.
 Upstream was developed with Claude; custom changes with Codex and David's
 playtesting. Retained licences: LICENSE.txt, ENGINE-LICENSE.txt and
