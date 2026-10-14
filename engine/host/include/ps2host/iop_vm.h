@@ -72,15 +72,6 @@ void EnableSound();
    Burnout 3's processed player engine is core 1's PCM input. */
 void SetPcmInputVolume(std::uint32_t core, std::uint32_t percent);
 
-/* A loaded interpreted module's relocated base, or 0 if absent. */
-std::uint32_t ModuleBase(const std::string& filename);
-/* Opt-in per-port software-driver endpoint for a libsd volume sweep.
-   The registers are the calling IOP context (read-only). Return false to
-   retain the exact hardware sweep, or true with its requested signed target. */
-using SweepTargetResolver = bool (*)(std::uint32_t entry, std::uint32_t value,
-                                    const std::uint32_t* registers, std::int32_t* target);
-void SetSweepTargetResolver(SweepTargetResolver resolver);
-
 /* For the report: one line per IOP thread. */
 std::string Report();
 

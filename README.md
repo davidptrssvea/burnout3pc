@@ -4,6 +4,8 @@ Personal Windows fork of [Daniel Gomes Vieira's Burnout 3 PC port](https://githu
 
 Requires your own **NTSC-U SLUS-21050** Burnout 3: Takedown disc image. Game images, extracted assets, generated game code, BIOS files, texture packs and personal saves are excluded. Unofficial fan project, unaffiliated with EA or Criterion.
 
+Current `main` restores edition 1's muted pause-preview workaround. The audible fault in experimental edition 2 remains under investigation.
+
 ## Changes
 
 - Xbox One USB button remapping, alternative bindings (`a+rt` means either button), vibration strength and trigger threshold.

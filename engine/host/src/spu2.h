@@ -58,8 +58,6 @@ public:
     void SetInputVolume(u32 core, u32 percent);
     void SetParam(u32 entry, u32 value);
     u32 GetParam(u32 entry) const;
-    // Optional software-driver endpoint; ordinary hardware sweeps are unchanged.
-    void SetSweepTarget(u32 entry, s32 target);
     void SetSwitch(u32 entry, u32 value);
     u32 GetSwitch(u32 entry) const;
     void SetAddr(u32 entry, u32 value);
@@ -98,8 +96,6 @@ private:
         u32 reg = 0;
         s32 now = 0;                    // -0x7FFF to 0x7FFF
         u32 counter = 0;
-        bool has_target = false;
-        s32 target = 0;
         explicit Level(u32 value = 0) { Set(value); }
         void Set(u32 value);
         void Step();
