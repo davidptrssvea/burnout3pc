@@ -20,6 +20,7 @@
 #include <vector>
 
 #include "ps2host/host.h"
+#include "ps2host/iop_vm.h"
 #include "ps2host/mc2.h"
 #include "ps2host/run.h"
 #include "ps2host/settings.h"
@@ -48,6 +49,12 @@ void F_00318100(lifted::Context& c);
 void F_003181E0(lifted::Context& c);
 void F_00321470(lifted::Context& c);
 void F_0031C350(lifted::Context& c);
+
+void F_003BE2A0(lifted::Context& c);
+void F_003F2970(lifted::Context& c);
+void F_003F2FE0(lifted::Context& c);
+void F_002844A0(lifted::Context& c);
+void F_00284650(lifted::Context& c);
 
 namespace {
 
@@ -150,10 +157,13 @@ void WaitsForInterrupt(lifted::Context& c) {
     Wait(c);
 }
 
+void LoadEngineVolume();
+
 template <void (*Load)(lifted::Context&)>
 void FastLoading(lifted::Context& c) {
     static const char* forced = std::getenv("PS2HOST_LOAD_SPEED");
     const unsigned speed = forced ? unsigned(std::max(1, std::atoi(forced))) : 8u;
+    LoadEngineVolume(); // Settings are loaded by Run before guest boot/loading.
     Load(c);
     ps2host::SetFastForward(u32(c.r[2]) ? 1 : speed);
 }
@@ -224,6 +234,29 @@ struct GuestText {
     }
 };
 
+// B3ROUTE returns the player's engine to core 1's PCM input. Host gain
+// leaves the other vehicles, radio and the game's Effects Volume untouched.
+int g_engine_volume = 100;
+bool g_engine_loaded = false;
+void LoadEngineVolume() {
+    if (g_engine_loaded) return;
+    const std::string value = ps2host::Setting("own_engine_volume", "100");
+    char* end = nullptr;
+    long parsed = std::strtol(value.c_str(), &end, 10);
+    g_engine_volume = end != value.c_str() && *end == 0
+        ? int(std::clamp(parsed, 0l, 200l)) : 100;
+    ps2host::iop::SetPcmInputVolume(1, unsigned(g_engine_volume));
+    g_engine_loaded = true;
+    if (std::getenv("PS2HOST_ENGINE_VOLUME_LOG"))
+        std::fprintf(stderr, "[engine-volume] startup: %d%%\n", g_engine_volume);
+}
+struct EngineAudioMenu {
+    u32 screen = 0, rows = 0;
+    unsigned row = 0;
+    int initial = 100;
+    GuestText label;
+} g_engine_menu;
+
 // The main menu's entries, by its own string ids (0x00318340 builds them).
 constexpr u32 kMainMenuOnline = 0xB8;       // "ONLINE"
 constexpr u32 kOnlineHelp = 0xEC;           // "PLAY BURNOUT 3 ONLINE", its description
@@ -293,6 +326,7 @@ MainMenuState g_main;
 
 void MakeTexts(lifted::Context& c) {
     if (g_main.made) return;
+    LoadEngineVolume();
     g_pool.Begin(c);
     g_main.entries = g_pool.Take(8 * kEntries, 8);
     g_main.helps = g_pool.Take(4 * kEntries, 4);
@@ -351,6 +385,132 @@ u32 GuestCall(lifted::Context& c, u32 target, std::initializer_list<u32> argumen
     const u32 result = u32(c.r[2]);
     std::memcpy(c.r, saved, sizeof saved);
     return result;
+}
+
+// Audio's Effects selection starts two looping demonstration sounds. The
+// port's preview path produces objectionable distorted noise during a paused
+// race. Suppress that automatic demonstration, while keeping native volume
+// changes, menu feedback, radio and all actual race sound effects intact.
+// The timer write is exactly what Audio's other rows do (0x00283DA0).
+// Audio's a1 flag hides the output-mode option in the pause menu (1),
+// while the front-end Settings screen passes 0 and keeps that option.
+// The screen is also entered through virtual calls, so use the flag rather
+// than a return address to preserve the working front-end preview.
+struct AudioPreviewContext { u32 screen = 0; bool paused = false; } g_audio_preview;
+void AudioScreenSetUp(lifted::Context& c) {
+    g_audio_preview.screen = u32(c.r[4]);
+    g_audio_preview.paused = u32(c.r[5]) != 0;
+    if (std::getenv("PS2HOST_ENGINE_VOLUME_LOG"))
+        std::fprintf(stderr, "[audio-context] %s Audio, flag=%u, screen=%08X, caller=%08X\n",
+            g_audio_preview.paused ? "pause" : "front-end", u32(c.r[5]), g_audio_preview.screen, u32(c.r[31]));
+    F_003F2FE0(c);
+}
+
+template <void (*Original)(lifted::Context&)>
+void AudioEffectsPreview(lifted::Context& c) {
+    const u32 caller = u32(c.r[31]);
+    const bool audio = caller == 0x003F3104u || caller == 0x003F3140u ||
+                       caller == 0x003F29BCu || caller == 0x003F29D0u;
+    const u32 screen = (caller == 0x003F3104u || caller == 0x003F3140u)
+        ? u32(c.r[16]) : u32(c.r[18]);
+    if (!audio || !g_audio_preview.paused || screen != g_audio_preview.screen) {
+        Original(c);
+        return;
+    }
+    generated::Write32(u32(c.r[4]) + 0x48, 1);
+    if (std::getenv("PS2HOST_ENGINE_VOLUME_LOG") &&
+        (caller == 0x003F3104u || caller == 0x003F3140u))
+        std::fprintf(stderr, "[audio-preview] automatic effects demonstration suppressed\n");
+}
+
+// Reuse the native Audio menu's bar and navigation. The pause Audio screen
+// owns only three 20-byte descriptors: copy them to donor memory before adding
+// our fourth, rather than overwriting its row-to-setting map at screen+0x58.
+void EngineAudioSetUp(lifted::Context& c) {
+    const u32 widget = u32(c.r[4]), header = u32(c.r[5]), rows = u32(c.r[6]);
+    const unsigned count = generated::ReadU16(header + 2);
+    if (u32(c.r[31]) != 0x003F316Cu || (count < 2 || count > 3) ||
+        generated::ReadU8(rows + 13) != 7 || generated::ReadU8(rows + 33) != 7) {
+        F_003BE2A0(c);
+        return;
+    }
+    LoadEngineVolume();
+    g_pool.Begin(c);
+    if (!g_engine_menu.rows) {
+        g_engine_menu.rows = g_pool.Take(80, 4);
+        g_engine_menu.label.Make(32);
+    }
+    if (!g_engine_menu.rows || !g_engine_menu.label.at) {
+        F_003BE2A0(c);
+        return;
+    }
+    g_engine_menu.screen = header - 4;
+    g_engine_menu.row = count;
+    g_engine_menu.initial = g_engine_volume;
+    if (std::getenv("PS2HOST_ENGINE_VOLUME_LOG"))
+        std::fprintf(stderr, "[engine-volume] Audio opened: row %u, %d%%\n", count, g_engine_volume);
+    for (u32 i = 0; i < count * 20; ++i)
+        generated::Write8(g_engine_menu.rows + i, generated::ReadU8(rows + i));
+    const u32 row = g_engine_menu.rows + count * 20;
+    for (u32 i = 0; i < 20; ++i) generated::Write8(row + i, 0);
+    g_engine_menu.label.Set("OWN ENGINE: " + std::to_string(g_engine_volume) + "%");
+    generated::Write32(row, g_engine_menu.label.at);
+    generated::Write8(row + 12, unsigned(g_engine_volume / 10));
+    generated::Write8(row + 13, 7);            // native 20-segment volume bar
+    generated::Write32(g_engine_menu.screen + 0x58 + count * 4, 4); // no original sound setting
+    generated::Write16(header + 2, count + 1);
+    c.r[6] = g_engine_menu.rows;
+    F_003BE2A0(c);
+    GuestCall(c, 0x003BC4C0u, {widget, count, unsigned(g_engine_volume / 10)});
+}
+
+void EngineAudioInput(lifted::Context& c) {
+    const u32 screen = u32(c.r[4]);
+    if (screen != g_engine_menu.screen || generated::ReadU32(0x01E90424u) != 5 ||
+        generated::ReadU16(screen + 6) != g_engine_menu.row + 1) {
+        F_003F2970(c);
+        return;
+    }
+    // The game's repeated UI-button events, also used for remapped Xbox input.
+    // Preserve its Up/Down priority and its confirmation/back/Start handling.
+    u32 pad = generated::ReadU8(0x004F6061u);
+    const u32 events = 0x004F5E08u + pad * 300;
+    const bool up = generated::ReadU16(events + 0x2C) != 0;
+    const bool down = generated::ReadU16(events + 0x38) != 0;
+    const bool left = generated::ReadU16(events + 0x14) != 0;
+    const bool right = generated::ReadU16(events + 0x20) != 0;
+    const bool back = generated::ReadU16(events + 0x5C) != 0;
+    const bool confirm = generated::ReadU16(events + 0x50) != 0;
+    const bool resume = GuestCall(c, 0x0012FB10u, {events, 1}) != 0;
+    if (generated::ReadU16(screen + 4) == g_engine_menu.row && !up && !down && (left || right)) {
+        const int next = std::clamp(g_engine_volume + (left ? -10 : 10), 0, 200);
+        if (next != g_engine_volume) {
+            g_engine_volume = next;
+            if (std::getenv("PS2HOST_ENGINE_VOLUME_LOG"))
+                std::fprintf(stderr, "[engine-volume] live %d%%\n", next);
+            ps2host::iop::SetPcmInputVolume(1, unsigned(next));
+            g_engine_menu.label.Set("OWN ENGINE: " + std::to_string(next) + "%");
+            GuestCall(c, 0x003BC4C0u, {0x01E8961Cu, g_engine_menu.row, unsigned(next / 10)});
+            // Repaint the dynamic label using the native highlight style.
+            generated::Write32(0x01E8961Cu + 0xDC, ~0u);
+            GuestCall(c, 0x002853F0u, {0x01E7A800u});
+        }
+        return;
+    }
+    F_003F2970(c);
+    const bool closing = !up && !down && !left && !right &&
+        (generated::ReadU8(screen + 0x6C) != 0 || resume);
+    if (closing) {
+        if (back && !confirm && !resume) {
+            g_engine_volume = g_engine_menu.initial;
+            ps2host::iop::SetPcmInputVolume(1, unsigned(g_engine_volume));
+        } else if (g_engine_volume != g_engine_menu.initial) {
+            ps2host::SetSetting("own_engine_volume", std::to_string(g_engine_volume));
+        }
+        if (std::getenv("PS2HOST_ENGINE_VOLUME_LOG"))
+            std::fprintf(stderr, "[engine-volume] %s: %d%%\n", back && !confirm && !resume ? "cancelled" : "saved", g_engine_volume);
+        g_engine_menu.screen = 0;
+    }
 }
 
 /* 0x00321470(list, &index, entries): the main menu's list (0x00318340 sets
@@ -543,6 +703,11 @@ void RegisterGameOverrides() {
     RegisterGameIopServers();
     RegisterWidescreen();
     RegisterMouse();
+    ps2host::Override(0x003F2FE0u, AudioScreenSetUp, "Audio: distinguish pause and front-end previews");
+    ps2host::Override(0x002844A0u, AudioEffectsPreview<F_002844A0>, "Audio: suppress distorted automatic effects preview");
+    ps2host::Override(0x00284650u, AudioEffectsPreview<F_00284650>, "Audio: suppress automatic surround effects preview");
+    ps2host::Override(0x003BE2A0u, EngineAudioSetUp, "pause Audio: player engine volume bar");
+    ps2host::Override(0x003F2970u, EngineAudioInput, "pause Audio: live player engine volume");
     using namespace ps2host::mc2;
     ps2host::Override(0x00244218, CardOr<GetInfo, F_00244218>, "libmc2 GetInfo (host card)");
     ps2host::Override(0x002445D0, CardOr<Format, F_002445D0>, "libmc2 Format (host card)");

@@ -34,3 +34,15 @@ games/*/include/*/
 replacements/
 texture pack/
 texture_pack/
+
+# Local binaries, personal settings, saves and debugging captures.
+*.exe
+*.dll
+*.obj
+*.pdb
+*.wav
+*.log
+pc_settings.ini*
+memcard*/
+captures/
+*.controls-backup
