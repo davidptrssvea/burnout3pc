@@ -13,7 +13,7 @@ Requires your own **NTSC-U SLUS-21050** Burnout 3: Takedown disc image. Game ima
 - More efficient anisotropic filtering, draw bounds and VU calculations. Performance depends on hardware and scene.
 - Own-car engine audio fixes, including SPU2 capture/PCM routing and audio instruction translation.
 - **OWN ENGINE** volume in pause → Audio, 0–200%, saved separately from Effects Volume.
-- Suppression of the distorted automatic Effects Volume demonstration in pause Audio. Front-end preview and race effects remain enabled. This is a workaround; the underlying preview distortion remains unresolved.
+- Working automatic Effects Volume demonstration in pause Audio: native volume ramps settle at the level requested by the sound driver instead of oscillating when its next poll is delayed. The previous preview suppression is removed.
 
 DualSense adaptive triggers and steering-wheel force feedback have not been added.
 

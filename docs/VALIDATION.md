@@ -12,3 +12,20 @@ Previous development checks on Windows with i5-13400F and RTX 4070 Ti:
 For packaging, the settings app is compiled and the build helper is syntax/CLI checked. A fresh full regeneration/build from a clean checkout has not yet been completed. VU recordings and game translations are deliberately omitted and must be generated locally.
 
 A pre-existing intermittent native host-test process failure (`0xC0000409`, no output) passed on retry. Underlying pause-preview distortion remains unresolved; only that demonstration is suppressed.
+
+## Pause-preview interpolation correction (Xbox edition 2)
+
+The suppression above describes edition 1. Edition 2 restores the native
+preview functions and supplies the RWA driver's requested sweep endpoints while
+pause Audio is open. Its ~33 ms polling interval otherwise lets ~10 ms ramps
+overshoot and reverse repeatedly. This corrects that oscillation; it does not
+make the entire IOP scheduler cycle-accurate.
+
+Native host tests cover upward/downward/signed endpoints, register readback and
+clearing a stale endpoint. A full race/pause/Audio/volume/resume replay passed.
+Before-menu and resumed-race PCM were identical to baseline, as was the complete
+front-end Audio replay. Preview voice levels settled at the native targets:
+20690/20804, then 19514/19624 at the lowered Effects Volume, then 20690/20804.
+The 303–310 s preview remained audible (RMS 11433.50); final clipped samples
+fell from 647 to 13 of 672000. Small remaining loud transients are not claimed
+fixed. Other tracks and output modes have not been exhaustively playtested.

@@ -1,5 +1,5 @@
 Burnout 3 PC - Xbox Controller Edition
-v0.2.0-xbox.1 (2026-10-14), Windows x64, prerelease
+v0.2.0-xbox.2 (2026-10-14), Windows x64, prerelease
 
 This is the latest locally playtested custom build based on upstream
 0.2.0-alpha. The executable's internal upstream version may still show 0.2.0.
@@ -32,9 +32,11 @@ and restored own-car engine audio. In pause -> Audio, OWN ENGINE adjusts
 0-200% independently. 100% is the original volume and the release default.
 Confirm saves; cancel restores the entry value. High gains may clip.
 
-The distorted automatic Effects Volume preview is suppressed only in
-pause Audio. The volume control, race effects and front-end preview remain.
-The underlying preview distortion has not been repaired.
+The automatic Effects Volume preview is restored in pause Audio. The port
+settles its native volume ramps at the sound driver's requested level, avoiding
+zero/full-scale oscillation when the next software poll is delayed. The volume
+control, race effects and front-end preview remain. This compensates for coarse
+polling rather than implementing a fully cycle-accurate IOP scheduler.
 This remains an alpha; performance varies by machine and scene.
 DualSense adaptive triggers and steering-wheel force feedback are not added.
 

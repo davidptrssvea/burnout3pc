@@ -1259,6 +1259,26 @@ void SpuDecodesAdpcmAndPlaysAVoice() {
     Check(heard[2 * 575] == 0 && heard[2 * 575 + 1] > 3500, "SPU2: the sweep reaches silence, the other side plays on");
     Check(spu.GetParam(0x0600) == 0, "SPU2: VOLXL, the current volume, is the sweep's");
 
+    // A software driver's endpoint prevents a delayed poll from overshooting.
+    spu.SetParam(0x0000, 0x0400); // current 2048
+    spu.SetParam(0x0000, 0x8022);
+    spu.SetSweepTarget(0x0000, 6000);
+    spu.Advance(48000, none); // the paused driver's ~33 ms gap
+    Check(spu.GetParam(0x0600) == 6000, "SPU2: an increasing driver sweep holds its requested target");
+    Check(spu.GetParam(0x0000) == 0x8022, "SPU2: target settling preserves the native sweep register");
+    spu.SetParam(0x0000, 0xA025);
+    spu.SetSweepTarget(0x0000, 2048);
+    spu.Advance(81000, none);
+    Check(spu.GetParam(0x0600) == 2048, "SPU2: a decreasing driver sweep holds its target, not silence");
+    spu.SetParam(0x0000, 0xA025); // new ordinary sweep clears the optional target
+    spu.Advance(114000, none);
+    Check(spu.GetParam(0x0600) == 0, "SPU2: ordinary hardware sweeps remain unbounded by a stale target");
+    spu.SetParam(0x0000, 0x7000); // negative current
+    spu.SetParam(0x0000, 0x9022);
+    spu.SetSweepTarget(0x0000, -16000);
+    spu.Advance(147000, none);
+    Check(spu.GetParam(0x0600) == u32(u16(s16(-16000))), "SPU2: negative-phase driver target retains its sign");
+
     // Wet-only voices need their capture buffers even with reverb disabled.
     // Burnout 3 DMA-reads this mix to process the player's engine sound.
     Spu2 captured;

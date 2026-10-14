@@ -29,6 +29,7 @@
 #include <sstream>
 
 #include "iop_vm_internal.h"
+#include "ps2host/iop_vm.h"
 #include "spu2.h"
 #include "ps2host/disc.h"
 #include "ps2host/memory.h"
@@ -698,7 +699,16 @@ Sound& S() {
 
 Outcome SdInit(Vm&, Context& c) { return Ret(c, KE_OK); }
 
-Outcome SdSetParam(Vm&, Context& c) { S().spu.SetParam(c.r[4] & 0xFFFF, c.r[5] & 0xFFFF); return Ret(c, 0); }
+SweepTargetResolver g_sweep_target_resolver = nullptr;
+Outcome SdSetParam(Vm&, Context& c) {
+    const u32 entry = c.r[4] & 0xFFFF, value = c.r[5] & 0xFFFF;
+    S().spu.SetParam(entry, value);
+    s32 target = 0;
+    if ((entry >> 8) <= 1 && (value & 0x8000) && g_sweep_target_resolver &&
+        g_sweep_target_resolver(entry, value, c.r, &target))
+        S().spu.SetSweepTarget(entry, target);
+    return Ret(c, 0);
+}
 Outcome SdGetParam(Vm&, Context& c) { return Ret(c, S().spu.GetParam(c.r[4] & 0xFFFF)); }
 Outcome SdSetSwitch(Vm&, Context& c) { S().spu.SetSwitch(c.r[4] & 0xFFFF, c.r[5]); return Ret(c, 0); }
 Outcome SdGetSwitch(Vm&, Context& c) { return Ret(c, S().spu.GetSwitch(c.r[4] & 0xFFFF)); }
@@ -972,6 +982,8 @@ std::string ExportName(const std::string& library, u32 index) {
     const auto found = names.find({library, index});
     return found == names.end() ? "?" : found->second;
 }
+
+void SetSweepTargetResolver(SweepTargetResolver resolver) { g_sweep_target_resolver = resolver; }
 
 void SetPcmInputVolume(u32 core, u32 percent) { S().spu.SetInputVolume(core, percent); }
 

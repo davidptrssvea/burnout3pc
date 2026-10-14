@@ -101,6 +101,7 @@ struct Vm {
     u32 command_buffer = 0;                      // where arriving packets are put (the host's)
     u32 handler_table = 0;                       // sceSifSetCmdBuffer's, for its answer
     u64 instructions = 0;
+    std::map<std::string, u32> module_bases;
     bool trace = false;
     std::map<u32, std::pair<u64, u32>> calls;    // with trace: target -> (count, a caller)
     u32 executing = 0;                           // the instruction being run, for messages

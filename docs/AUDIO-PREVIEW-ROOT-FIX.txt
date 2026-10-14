@@ -1,0 +1,36 @@
+Burnout 3 - pause Audio preview interpolation correction (2026-10-14)
+
+Diagnosis:
+RWA's native current-volume polling occurs roughly every 33 ms in pause Audio.
+Its linear volume ramps reach the requested level in about 10 ms. With delayed
+polling, the ramps run beyond their intended endpoint and the next update
+reverses them. Tracing showed repeated near-zero/full-scale oscillation.
+Disabling reverb did not resolve it. The front-end preview has stable levels.
+
+Correction:
+The native stereo/surround preview functions run unmodified again; suppression
+is removed. While pause Audio is open, a port-specific resolver reads the exact
+left/right targets from the native RWA interpolation call sites. An opt-in SPU2
+sweep endpoint keeps their rates but settles at those targets until the next
+native poll. Front-end and race sweeps retain their ordinary hardware behavior.
+This compensates for the port's coarse polling; it does not make the entire
+IOP scheduler cycle-accurate.
+
+Validation:
+- Native host tests passed, including increasing, decreasing and signed sweep
+  endpoints, native register readback, and clearing an endpoint on a new sweep.
+- Full race/pause/Audio/engine-volume/resume fixture reached frame 19900.
+- Before-menu PCM (first 300 seconds) was byte-identical to the baseline.
+- Resumed-race PCM (325-330 seconds) was byte-identical to the previous build.
+- Complete front-end Settings -> Audio fixture PCM was byte-identical.
+- Preview channels 17/18 no longer oscillated: steady left/right levels were
+  20690/20804, changing to 19514/19624 when Effects Volume was lowered, then
+  returning to 20690/20804 when raised. These match the native requested targets.
+- Preview interval 303-310 seconds stayed audible: RMS 11433.50 versus the
+  muted workaround's 163.33. Final-output clipped samples fell from 647 to 13
+  out of 672000 samples; small remaining loud transients are not claimed fixed.
+- Own engine volume could still be changed and saved in the native Audio menu.
+
+Local replay tests use a private configuration and no personal memory card.
+User listening confirmation is still useful; other tracks/audio-output modes
+have not been exhaustively playtested.

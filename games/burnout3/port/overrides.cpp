@@ -53,8 +53,6 @@ void F_0031C350(lifted::Context& c);
 void F_003BE2A0(lifted::Context& c);
 void F_003F2970(lifted::Context& c);
 void F_003F2FE0(lifted::Context& c);
-void F_002844A0(lifted::Context& c);
-void F_00284650(lifted::Context& c);
 
 namespace {
 
@@ -387,40 +385,47 @@ u32 GuestCall(lifted::Context& c, u32 target, std::initializer_list<u32> argumen
     return result;
 }
 
-// Audio's Effects selection starts two looping demonstration sounds. The
-// port's preview path produces objectionable distorted noise during a paused
-// race. Suppress that automatic demonstration, while keeping native volume
-// changes, menu feedback, radio and all actual race sound effects intact.
-// The timer write is exactly what Audio's other rows do (0x00283DA0).
-// Audio's a1 flag hides the output-mode option in the pause menu (1),
-// while the front-end Settings screen passes 0 and keeps that option.
-// The screen is also entered through virtual calls, so use the flag rather
-// than a return address to preserve the working front-end preview.
+// RWA's positional sound interpolation expects frequent current-volume polls.
+// Pause Audio updates it every ~33 ms in this port. A ~10 ms hardware sweep
+// can overshoot the requested level before the next poll, producing a
+// zero/full-scale oscillation. Preserve its rate and stop at RWA's actual
+// requested level, until its normal next poll settles the voice.
+// This uses only the two native left/right interpolation call sites, only
+// while pause Audio is open. Front-end, race and other hardware sweeps remain.
 struct AudioPreviewContext { u32 screen = 0; bool paused = false; } g_audio_preview;
 void AudioScreenSetUp(lifted::Context& c) {
     g_audio_preview.screen = u32(c.r[4]);
     g_audio_preview.paused = u32(c.r[5]) != 0;
     if (std::getenv("PS2HOST_ENGINE_VOLUME_LOG"))
-        std::fprintf(stderr, "[audio-context] %s Audio, flag=%u, screen=%08X, caller=%08X\n",
-            g_audio_preview.paused ? "pause" : "front-end", u32(c.r[5]), g_audio_preview.screen, u32(c.r[31]));
+        std::fprintf(stderr, "[audio-context] %s Audio, flag=%u, screen=%08X\n",
+            g_audio_preview.paused ? "pause" : "front-end", u32(c.r[5]), g_audio_preview.screen);
     F_003F2FE0(c);
 }
 
-template <void (*Original)(lifted::Context&)>
-void AudioEffectsPreview(lifted::Context& c) {
-    const u32 caller = u32(c.r[31]);
-    const bool audio = caller == 0x003F3104u || caller == 0x003F3140u ||
-                       caller == 0x003F29BCu || caller == 0x003F29D0u;
-    const u32 screen = (caller == 0x003F3104u || caller == 0x003F3140u)
-        ? u32(c.r[16]) : u32(c.r[18]);
-    if (!audio || !g_audio_preview.paused || screen != g_audio_preview.screen) {
-        Original(c);
-        return;
+bool AudioPreviewSweepTarget(u32 entry, u32 value, const u32* registers, s32* target) {
+    if (!g_audio_preview.paused || !g_engine_menu.screen ||
+        g_engine_menu.screen != g_audio_preview.screen || (entry & 1) ||
+        (value & 0xC000) != 0x8000)
+        return false;
+    const u32 base = ps2host::iop::ModuleBase("RWA.IRX");
+    if (!base) return false;
+    const u32 caller = registers[31];
+    s32 desired;
+    if ((entry >> 8) == 0 && caller == base + 0x371C)
+        desired = s32(registers[19]); // s3: requested left magnitude
+    else if ((entry >> 8) == 1 && caller == base + 0x3834)
+        desired = s32(registers[18]); // s2: requested right magnitude
+    else return false;
+    if (desired < 0 || desired > 32767) return false;
+    *target = (value & 0x1000) ? -desired : desired;
+    if (std::getenv("PS2HOST_ENGINE_VOLUME_LOG")) {
+        static bool logged = false;
+        if (!logged) {
+            std::fprintf(stderr, "[audio-preview] native demonstration enabled; interpolation target=%d\n", *target);
+            logged = true;
+        }
     }
-    generated::Write32(u32(c.r[4]) + 0x48, 1);
-    if (std::getenv("PS2HOST_ENGINE_VOLUME_LOG") &&
-        (caller == 0x003F3104u || caller == 0x003F3140u))
-        std::fprintf(stderr, "[audio-preview] automatic effects demonstration suppressed\n");
+    return true;
 }
 
 // Reuse the native Audio menu's bar and navigation. The pause Audio screen
@@ -703,9 +708,8 @@ void RegisterGameOverrides() {
     RegisterGameIopServers();
     RegisterWidescreen();
     RegisterMouse();
+    ps2host::iop::SetSweepTargetResolver(AudioPreviewSweepTarget);
     ps2host::Override(0x003F2FE0u, AudioScreenSetUp, "Audio: distinguish pause and front-end previews");
-    ps2host::Override(0x002844A0u, AudioEffectsPreview<F_002844A0>, "Audio: suppress distorted automatic effects preview");
-    ps2host::Override(0x00284650u, AudioEffectsPreview<F_00284650>, "Audio: suppress automatic surround effects preview");
     ps2host::Override(0x003BE2A0u, EngineAudioSetUp, "pause Audio: player engine volume bar");
     ps2host::Override(0x003F2970u, EngineAudioInput, "pause Audio: live player engine volume");
     using namespace ps2host::mc2;

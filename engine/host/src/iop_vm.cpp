@@ -436,6 +436,17 @@ void SetTrace(bool on) { TheVm().trace = on; }
 
 void RunModule(const std::string& file_name) { RunList().insert(Upper(file_name)); }
 
+u32 ModuleBase(const std::string& path) {
+    std::string name = Upper(path);
+    const std::size_t slash = name.find_last_of("\\/:");
+    if (slash != std::string::npos) name = name.substr(slash + 1);
+    const std::size_t version = name.find(';');
+    if (version != std::string::npos) name = name.substr(0, version);
+    const auto& modules = TheVm().module_bases;
+    const auto found = modules.find(name);
+    return found == modules.end() ? 0 : found->second;
+}
+
 bool RunsModule(const std::string& path) {
     std::string name = Upper(path);
     const std::size_t slash = name.find_last_of("\\/:");
@@ -564,6 +575,12 @@ bool LoadModule(const std::string& path, const std::vector<u8>& image,
     Thread& done = vm.threads[loader.id];
     if (done.wait != Wait::Dormant) Stop(path + "'s start routine did not finish");
     *result = s32(done.c.r[2]);
+    std::string module_name = Upper(path);
+    const auto slash = module_name.find_last_of("\\/:");
+    if (slash != std::string::npos) module_name = module_name.substr(slash + 1);
+    const auto version = module_name.find(';');
+    if (version != std::string::npos) module_name = module_name.substr(0, version);
+    vm.module_bases[module_name] = base;
     vm.Free(done.stack);
     vm.threads.erase(loader.id);
     Run();

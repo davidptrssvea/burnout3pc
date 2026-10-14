@@ -41,6 +41,7 @@ struct Rate {
 }  // namespace
 
 void Spu2::Level::Set(u32 value) {
+    has_target = false;
     reg = value & 0xFFFF;
     if (!(reg & 0x8000)) now = Volume(reg);         // fixed; a sweep goes on from where it is
     counter = 0;
@@ -54,6 +55,7 @@ void Spu2::Level::Step() {
     const u32 rate = reg & 0x7F;
     if (rate == 0x7F) return;
     const bool exponential = (reg & 0x4000) != 0, decreasing = (reg & 0x2000) != 0, negative = (reg & 0x1000) != 0;
+    const s32 before = now;
     s32 magnitude = now < 0 ? -now : now;
     const u32 shift = rate >> 2;
     s32 step = decreasing ? -8 + s32(rate & 3) : 7 - s32(rate & 3);
@@ -73,6 +75,9 @@ void Spu2::Level::Step() {
     counter = 0;
     magnitude = std::min(0x7FFF, std::max(0, magnitude + step));
     now = negative ? -magnitude : magnitude;
+    if (has_target && ((before <= target && now >= target) ||
+                       (before >= target && now <= target)))
+        now = target; // Driver polling can be delayed by an EE menu frame.
 }
 
 void Spu2::DecodeBlock(const u8* block, s32 out[28], s32* older, s32* old) {
@@ -119,6 +124,15 @@ void Spu2::SetParam(u32 entry, u32 value) {
         case 0x0C: c.evolr = value; break;             // SD_P_EVOLR
         default: break;
     }
+}
+
+void Spu2::SetSweepTarget(u32 entry, s32 target) {
+    if ((entry >> 8) > 1 || VoiceOf(entry) >= 24) return;
+    Voice& v = cores_[CoreOf(entry)].voices[VoiceOf(entry)];
+    Level& level = (entry >> 8) == 0 ? v.left : v.right;
+    if (!(level.reg & 0x8000)) return;
+    level.target = std::clamp(target, -32768, 32767);
+    level.has_target = true;
 }
 
 Spu2::u32 Spu2::GetParam(u32 entry) const {
