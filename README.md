@@ -1,4 +1,4 @@
-# Burnout 3 PC — Xbox controller edition
+# Burnout 3 PC - Xbox controller edition
 
 Personal Windows fork of [Daniel Gomes Vieira's Burnout 3 PC port](https://github.com/danielgomesvieira2000/burnout3-pc), with Xbox One controller, graphics, performance and audio improvements.
 
@@ -10,11 +10,11 @@ Current `main` and release `v0.2.0-xbox.3` keep the objectionable pause preview 
 
 - Xbox One USB button remapping, alternative bindings (`a+rt` means either button), vibration strength and trigger threshold.
 - Runtime-generated Xbox prompts following the selected mapping.
-- English Windows settings app, FXAA, anisotropic filtering at 2x/4x/8x/16x, internal resolution 1x–4x and optional FSR 1 upscaling with adjustable sharpness.
+- English Windows settings app, FXAA, anisotropic filtering at 2x/4x/8x/16x, internal resolution 1x-4x and optional FSR 1 upscaling with adjustable sharpness.
 - FPS display on **F10**, replacing the upstream F10 HUD-editor binding.
 - More efficient anisotropic filtering, draw bounds, VU calculations, GIF packet handling and GPU buffer conversions. Performance depends on hardware and scene.
 - Own-car engine audio fixes, including SPU2 capture/PCM routing and audio instruction translation.
-- **OWN ENGINE** volume in pause → Audio, 0–200%, saved separately from Effects Volume.
+- **OWN ENGINE** volume in pause > Audio, 0-200%, saved separately from Effects Volume.
 - Distorted pause Audio preview is muted as a workaround. The underlying distortion is not repaired; edition 2's experimental correction still sounded distorted and is not recommended.
 
 DualSense adaptive triggers and steering-wheel force feedback have not been added.
