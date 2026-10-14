@@ -4,18 +4,18 @@ Personal Windows fork of [Daniel Gomes Vieira's Burnout 3 PC port](https://githu
 
 Requires your own **NTSC-U SLUS-21050** Burnout 3: Takedown disc image. Game images, extracted assets, generated game code, BIOS files, texture packs and personal saves are excluded. Unofficial fan project, unaffiliated with EA or Criterion.
 
-Current `main` keeps the objectionable pause preview muted. David also reproduced that sound in PCSX2. Experimental edition 2 re-enables it and is not recommended.
+Current `main` and release `v0.2.0-xbox.3` keep the objectionable pause preview muted. David also reproduced that sound in PCSX2. Experimental edition 2 re-enables it and is not recommended.
 
 ## Changes
 
 - Xbox One USB button remapping, alternative bindings (`a+rt` means either button), vibration strength and trigger threshold.
 - Runtime-generated Xbox prompts following the selected mapping.
-- English Windows settings app, FXAA, anisotropic filtering at 2x/4x/8x/16x, internal resolution 1x�4x and optional FSR 1 upscaling with adjustable sharpness.
+- English Windows settings app, FXAA, anisotropic filtering at 2x/4x/8x/16x, internal resolution 1x–4x and optional FSR 1 upscaling with adjustable sharpness.
 - FPS display on **F10**, replacing the upstream F10 HUD-editor binding.
 - More efficient anisotropic filtering, draw bounds, VU calculations, GIF packet handling and GPU buffer conversions. Performance depends on hardware and scene.
 - Own-car engine audio fixes, including SPU2 capture/PCM routing and audio instruction translation.
 - **OWN ENGINE** volume in pause → Audio, 0–200%, saved separately from Effects Volume.
-- Experimental pause Audio interpolation correction: native ramps settle at the sound driver's requested level, but user playtesting still reports badly distorted preview audio. Edition 2 re-enables that preview; **use edition 1's muted-preview workaround** while investigation continues.
+- Distorted pause Audio preview is muted as a workaround. The underlying distortion is not repaired; edition 2's experimental correction still sounded distorted and is not recommended.
 
 DualSense adaptive triggers and steering-wheel force feedback have not been added.
 

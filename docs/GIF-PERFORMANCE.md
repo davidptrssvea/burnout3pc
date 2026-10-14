@@ -1,4 +1,4 @@
-# GIF packet performance check — 2026-10-14
+# GIF packet performance check â€” 2026-10-14
 
 Complete non-image GIF quadwords now go directly to the existing Qword parser.
 Previously Words fed each one through four Word calls and a temporary assembly
@@ -11,7 +11,7 @@ No filtering, resolution, rendering rules or gameplay timing were changed.
 - Native host tests passed after the change, including existing image-format
   transfer and GPU consistency tests.
 - New regression compares PACKED A+D, packed vertices, odd-length REGLIST
-  padding, empty tags, and all stream chunk sizes 1–19 against scalar Word
+  padding, empty tags, and all stream chunk sizes 1â€“19 against scalar Word
   input. Register summaries, primitive counts and the full 4 MB of GS memory
   match, including rendered sprite pixels.
 - Baseline and candidate completed the native scripted Silver Lake race
@@ -29,7 +29,7 @@ No sampling profiler, timeline recording, GPU profile output or screenshots
 were enabled in the clean comparison. No window was shown: presentation and
 fullscreen scaling costs are excluded.
 
-For the same 28 complete one-second bins, frames 17700–19380:
+For the same 28 complete one-second bins, frames 17700â€“19380:
 
 | Native VIF1 transfer rate | Before | After |
 | --- | ---: | ---: |

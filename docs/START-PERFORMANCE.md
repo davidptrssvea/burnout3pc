@@ -1,4 +1,4 @@
-# Race-start buffer conversion — 2026-10-14
+# Race-start buffer conversion â€” 2026-10-14
 
 The start-camera sequence at 2x internal resolution and AF 8x puts much more
 load on GPU buffer conversion than the following drive. An exploratory GPU
@@ -12,7 +12,7 @@ as the cause of the dip.
   is replaced with equivalent bit permutations, including the depth XOR and
   the distinct CT16S layout.
 - 32 optional color-image transfer pipelines are prepared when the renderer
-  starts: four color formats, both directions and scales 1–4. Vulkan
+  starts: four color formats, both directions and scales 1â€“4. Vulkan
   specialization constants let the driver remove unused direction, format,
   scale and depth branches. Parameters and synchronization are unchanged.
 - Unsupported combinations and unsuccessful optional pipeline creation retain
@@ -39,7 +39,7 @@ configuration and frame-indexed inputs. Virtual boot switches to real time
 from frame 17400. No sampling/timeline/GPU-profile output or capture is active
 in the measured interval. The candidate capture occurs later, at frame 17850.
 
-Six half-second bins, frames 17490–17670:
+Six half-second bins, frames 17490â€“17670:
 
 | Internal picture production | Previous | Modified |
 | --- | ---: | ---: |

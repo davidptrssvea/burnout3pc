@@ -1,5 +1,5 @@
 Burnout 3 PC - Xbox Controller Edition
-v0.2.0-xbox.1 (2026-10-14), Windows x64, prerelease
+v0.2.0-xbox.3 (2026-10-14), Windows x64, prerelease
 
 This is the latest locally playtested custom build based on upstream
 0.2.0-alpha. The executable's internal upstream version may still show 0.2.0.
@@ -15,19 +15,21 @@ START
 Extract the whole folder somewhere writable. Run Play Burnout 3.cmd or
 burnout3.exe, and select your own ISO when asked. Run Settings.cmd or
 Settings.exe with the game closed to adjust controls, vibration, AA, AF,
-FPS display and performance mode. Settings are saved beside the executables.
+FPS display, performance mode, internal resolution and optional FSR 1.
+Settings are saved beside the executables.
 
 DEFAULTS
 Modern Xbox One USB mapping: RT/A accelerates and confirms, LT brakes,
 A boosts, Menu pauses, Y goes back. a+rt means either A or RT, not a chord.
 8x AF, AA off, FPS on, performance mode on, fullscreen, 4:3 aspect.
-Resolution follows the display within the engine's 4x PS2 scale limit.
+Internal resolution defaults to 2x; FSR 1 is off, with sharpness set to 50%.
 4K display output does not guarantee native internal 3840x2160 rendering.
 Change these options in the game's PC Settings or Settings.exe as appropriate.
 
 FEATURES
 Remappable Xbox controls and vibration, generated prompts following your
-bindings, FXAA, AF 2x/4x/8x/16x, F10 FPS display, graphics/performance fixes,
+bindings, FXAA, AF 2x/4x/8x/16x, optional FSR 1 (EASU + RCAS), F10 FPS display,
+optimized AF, GIF packet handling and GPU buffer conversions,
 and restored own-car engine audio. In pause -> Audio, OWN ENGINE adjusts
 0-200% independently. 100% is the original volume and the release default.
 Confirm saves; cancel restores the entry value. High gains may clip.
@@ -43,7 +45,9 @@ Close the game and make a backup. Replace burnout3.exe and Settings.exe,
 and optionally use the included English launchers. Keep your existing
 pc_settings.ini, memcard folder and texture pack. Do not overwrite your
 existing configuration with the release's default pc_settings.ini unless
-you want to reset it. The previous Settings app may be named Inställningar.exe.
+you want to reset it. If your old launcher opens Inställningar.exe, replace
+that file with the new Settings.exe renamed to Inställningar.exe, or use
+the included Settings.cmd launcher.
 
 SOURCE AND LICENCES
 https://github.com/davidptrssvea/burnout3pc (private repository)

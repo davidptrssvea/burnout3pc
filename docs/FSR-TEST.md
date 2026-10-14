@@ -1,7 +1,7 @@
-# Optional FSR 1 — 2026-10-14
+# Optional FSR 1 â€” 2026-10-14
 
 FSR 1 is a separate Windows Settings choice, default off. Internal resolution
-1x–4x and FSR sharpness 0–100% are selectable. Existing 2x / AF 8x configuration
+1xâ€“4x and FSR sharpness 0â€“100% are selectable. Existing 2x / AF 8x configuration
 and saves were preserved during installation. Select Upscaling = FSR 1 and
 sharpness 50% to start. Restart the game after saving.
 
@@ -42,7 +42,7 @@ time per Present, including image upload, processing, queue waits and submit:
 | 640x448 (1x) | 0.2863 ms | 0.6337 ms |
 | 1280x896 (2x) | 0.5839 ms | 0.9171 ms |
 
-FSR adds about 0.33–0.35 ms in this display-path test. This is neither a
+FSR adds about 0.33â€“0.35 ms in this display-path test. This is neither a
 GPU-timestamp measurement nor game FPS, and this upload benchmark differs
 from the game's GPU-image path. It shows FSR is inexpensive on this GPU but
 does not itself save time at unchanged input resolution.
@@ -53,8 +53,8 @@ Each mode runs the same frame-indexed Silver Lake fixture with 4K fullscreen,
 AF 8x, primary GPU rendering and real time from frame 17400. One run per mode,
 no capture/sampling in the measured interval. FSR initialization messages
 confirm the actual game display path, including the 2880x2160 output.
-The six half-second start-camera bins are frames 17490–17670; driving is
-17670–18030. These short runs are not a full-lap benchmark.
+The six half-second start-camera bins are frames 17490â€“17670; driving is
+17670â€“18030. These short runs are not a full-lap benchmark.
 
 | Mode | Start picture production | Lowest start bin | Driving picture production |
 | --- | ---: | ---: | ---: |
