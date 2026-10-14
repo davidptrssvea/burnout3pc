@@ -12,7 +12,7 @@ Current `main` keeps the objectionable pause preview muted. David also reproduce
 - Runtime-generated Xbox prompts following the selected mapping.
 - English Windows settings app, FXAA and anisotropic filtering at 2x/4x/8x/16x.
 - FPS display on **F10**, replacing the upstream F10 HUD-editor binding.
-- More efficient anisotropic filtering, draw bounds, VU calculations and GIF packet handling. Performance depends on hardware and scene.
+- More efficient anisotropic filtering, draw bounds, VU calculations, GIF packet handling and GPU buffer conversions. Performance depends on hardware and scene.
 - Own-car engine audio fixes, including SPU2 capture/PCM routing and audio instruction translation.
 - **OWN ENGINE** volume in pause → Audio, 0–200%, saved separately from Effects Volume.
 - Experimental pause Audio interpolation correction: native ramps settle at the sound driver's requested level, but user playtesting still reports badly distorted preview audio. Edition 2 re-enables that preview; **use edition 1's muted-preview workaround** while investigation continues.

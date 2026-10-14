@@ -44,3 +44,8 @@ assembly fast path, a clean native before/after race check, and its limits.
 David reports the same objectionable in-race Audio demonstration in PCSX2
 with the game. This weakens the earlier attribution to this port. The pause
 preview remains muted; no new mixer correction is claimed.
+
+## Race-start buffer conversion
+
+[Start-sequence measurements and graphics equivalence](START-PERFORMANCE.md)
+cover the buffer-addressing and prebuilt transfer-pipeline optimization.

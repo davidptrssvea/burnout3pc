@@ -636,6 +636,71 @@ void GpuMemorySwizzlesAsTheGs() {
 // Textures decoded on the GPU from its copy of local memory (--gpu, when the
 // GPU holds their blocks) must come out texel for texel as the GS model
 // decodes them: every format, CLUTs (CSA for 4-bit ones), TEXA, region modes.
+void GpuScaledColourTransfersAsTheGs() {
+    using namespace ps2host::gs;
+    std::string error;
+    auto gpu = ps2gpu::CreateGpu(&error);
+    if (!gpu) return;
+    auto renderer = ps2gpu::CreateGsRenderer(*gpu, &error);
+    Check(renderer != nullptr, "scaled transfer renderer starts");
+    if (!renderer) return;
+    Memory reference;
+    renderer->MemoryWrite(0, 16384, reference.data());
+    const u32 w = 384, h = 64, fbw = 6;
+    u32 base = 0x20, seed = 52413;
+    auto next = [&] { return seed = seed * 1664525u + 1013904223u; };
+    for (u32 scale : {2u, 3u, 4u}) {
+        renderer->SetScale(scale);
+        for (u32 psm : {PSMCT32, PSMCT24, PSMCT16, PSMCT16S}) {
+            const bool sixteen = psm == PSMCT16 || psm == PSMCT16S;
+            renderer->TargetFromMemory(base, fbw, psm, w, h);
+            ps2gpu::GsDrawState state;
+            state.fbp = base; state.fbw = fbw; state.psm = psm;
+            state.width = w; state.height = h;
+            state.scissor_x1 = w - 1; state.scissor_y1 = h - 1;
+            const ps2gpu::GsVertex vertices[] = {
+                {0, 0, 0, 16, 32, 64, 128, 0, 0, 1},
+                {float(w), 0, 0, 16, 32, 64, 128, 0, 0, 1},
+                {0, float(h), 0, 16, 32, 64, 128, 0, 0, 1},
+                {float(w), 0, 0, 16, 32, 64, 128, 0, 0, 1},
+                {float(w), float(h), 0, 16, 32, 64, 128, 0, 0, 1},
+                {0, float(h), 0, 16, 32, 64, 128, 0, 0, 1}};
+            renderer->DrawTriangles(state, vertices, 6);
+            Check(renderer->TargetToMemory(base, fbw, psm, w, h), "scaled target swizzles to memory");
+            for (u32 y = 0; y < h; ++y)
+                for (u32 x = 0; x < w; ++x) {
+                    u32 c = 0x80402010u;
+                    if (sixteen) c = ((c >> 3) & 31) | (((c >> 11) & 31) << 5) |
+                        (((c >> 19) & 31) << 10) | ((c >> 31) << 15);
+                    reference.Write(base * 32, fbw, x, y, psm, c);
+                }
+            std::vector<u8> bytes(4u << 20);
+            renderer->MemoryRead(0, 16384, bytes.data());
+            Check(std::memcmp(bytes.data(), reference.data(), bytes.size()) == 0,
+                  "2x/3x/4x color transfer matches scalar GS memory");
+            const u32 begin = base * 32, end = begin + fbw * (sixteen ? 1 : 2) * 32;
+            for (u32 i = begin * 256; i < end * 256; ++i) reference.data()[i] = u8(next() >> 24);
+            renderer->MemoryWrite(begin, end, reference.data() + begin * 256);
+            renderer->TargetFromMemory(base, fbw, psm, w, h);
+            std::vector<u32> back;
+            u32 width = 0, height = 0;
+            Check(renderer->ReadTarget(base, fbw, psm, &back, &width, &height) && width == w && height == h,
+                  "scaled reloaded image reads at native dimensions");
+            u32 wrong = 0;
+            if (back.size() == w * h)
+                for (u32 y = 0; y < h; ++y)
+                    for (u32 x = 0; x < w; ++x) {
+                        const u32 raw = reference.Read(begin, fbw, x, y, psm);
+                        const u32 want = sixteen ? ((raw & 31) << 3) | (((raw >> 5) & 31) << 11) |
+                            (((raw >> 10) & 31) << 19) | ((raw & 0x8000) ? 0x80000000u : 0) : raw;
+                        if (back[y * w + x] != want) ++wrong;
+                    }
+            Check(back.size() == w * h && wrong == 0, "scaled reload preserves every native color pixel");
+            base += 16;
+        }
+    }
+}
+
 void GpuDecodesTexturesAsTheGs() {
     using namespace ps2host::gs;
     std::string error;
@@ -1479,6 +1544,7 @@ int main() {
     TexturePackNamesAsPcsx2();
 #if PS2HOST_VULKAN
     GpuMemorySwizzlesAsTheGs();
+    GpuScaledColourTransfersAsTheGs();
     GpuDecodesTexturesAsTheGs();
 #endif
     VifRunsMicroprogramsOnAVu();

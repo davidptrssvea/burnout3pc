@@ -580,6 +580,7 @@ private:
     VkPipelineLayout patch_layout_ = VK_NULL_HANDLE;
     VkPipeline patch_pipeline_ = VK_NULL_HANDLE;
     VkPipeline swizzle_image_pipeline_ = VK_NULL_HANDLE;
+    VkPipeline swizzle_image_specialized_[4][2][4] = {};
     VkDescriptorSet StorageSet(Image& image);
     void SwizzleImage(VkCommandBuffer cmd, const SwizzleParams& params, Image& image);
     /* Depth buffers: to memory sampled (the swizzle's DEPTH_IMAGE), back drawn
@@ -996,6 +997,19 @@ bool VulkanGsRenderer::InitMemory(std::string* error) {
             if (error) *error = "the swizzle shader (images) did not load";
             return false;
         }
+        // Compile common format/direction/scale combinations before gameplay.
+        // A failed optional variant falls back to the generic pipeline.
+        const std::uint32_t formats[] = {0x00, 0x01, 0x02, 0x0A};
+        const VkSpecializationMapEntry entries[] = {{0, 0, 4}, {1, 4, 4}, {2, 8, 4}, {3, 12, 4}};
+        for (std::uint32_t f = 0; f < 4; ++f)
+            for (std::uint32_t direction = 0; direction < 2; ++direction)
+                for (std::uint32_t scale = 1; scale <= 4; ++scale) {
+                    const std::uint32_t values[] = {formats[f], direction, scale, 0};
+                    const VkSpecializationInfo info{4, entries, sizeof values, values};
+                    pi.stage.pSpecializationInfo = &info;
+                    vkCreateComputePipelines(g_.device, VK_NULL_HANDLE, 1, &pi, nullptr,
+                        &swizzle_image_specialized_[f][direction][scale - 1]);
+                }
     }
     if (!MakeDepthPipelines()) {
         if (error) *error = "the depth buffer shaders did not load";
@@ -1220,7 +1234,13 @@ void VulkanGsRenderer::SwizzleImage(VkCommandBuffer cmd, const SwizzleParams& pa
     Transition(cmd, image, VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT,
                VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
     const VkDescriptorSet sets[2] = {swizzle_set_, StorageSet(image)};
-    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, swizzle_image_pipeline_);
+    VkPipeline pipeline = swizzle_image_pipeline_;
+    const int format = params.psm == 0x00 ? 0 : params.psm == 0x01 ? 1 : params.psm == 0x02 ? 2 : params.psm == 0x0A ? 3 : -1;
+    if (format >= 0 && params.depth == 0 && params.to_memory <= 1 && params.scale >= 1 && params.scale <= 4) {
+        const VkPipeline specialized = swizzle_image_specialized_[format][params.to_memory][params.scale - 1];
+        if (specialized) pipeline = specialized;
+    }
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, swizzle_image_layout_, 0, 2, sets, 0, nullptr);
     vkCmdPushConstants(cmd, swizzle_image_layout_, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof params, &params);
     ++g_dispatches;
@@ -2736,6 +2756,10 @@ VulkanGsRenderer::~VulkanGsRenderer() {
     if (frag_) vkDestroyShaderModule(g_.device, frag_, nullptr);
     if (frag_blend_) vkDestroyShaderModule(g_.device, frag_blend_, nullptr);
     if (swizzle_pipeline_) vkDestroyPipeline(g_.device, swizzle_pipeline_, nullptr);
+    for (auto& formats : swizzle_image_specialized_)
+        for (auto& direction : formats)
+            for (VkPipeline pipeline : direction)
+                if (pipeline) vkDestroyPipeline(g_.device, pipeline, nullptr);
     if (swizzle_layout_) vkDestroyPipelineLayout(g_.device, swizzle_layout_, nullptr);
     if (swizzle_pool_) vkDestroyDescriptorPool(g_.device, swizzle_pool_, nullptr);
     if (swizzle_set_layout_) vkDestroyDescriptorSetLayout(g_.device, swizzle_set_layout_, nullptr);
