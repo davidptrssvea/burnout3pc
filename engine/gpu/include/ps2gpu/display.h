@@ -54,6 +54,12 @@ public:
        toggles fullscreen. */
     virtual bool Pump() = 0;
     virtual void SetFxaa(bool enabled) { (void)enabled; }
+    virtual void SetFsr(bool enabled, float sharpness=0.5f) { (void)enabled; (void)sharpness; }
+    /* Diagnostic readback of the last processed picture (RGBA, before bars and
+       overlays). Stalls the GPU; call only in display tests, outside timing. */
+    virtual bool ReadProcessed(std::vector<std::uint32_t>* pixels, std::uint32_t* width, std::uint32_t* height) {
+        (void)pixels; (void)width; (void)height; return false;
+    }
 
     /* How evenly pictures went to the screen since the last call (--frame-times):
        presents, and the time between them - mean, standard deviation and

@@ -185,6 +185,7 @@ bool OpenWindow(const wchar_t* title, int width, int height) {
         if (SettingOn("vsync")) g_display->SetVsync(true);
         g_display->SetAspect(SettingAspect());
         g_display->SetFxaa(Setting("aa","off")=="fxaa");
+        g_display->SetFsr(Setting("upscaling","off")=="fsr1", std::clamp(std::atoi(Setting("fsr_sharpness","50").c_str()),0,100)/100.0f);
         return true;
     }
     Note("window", "window: no Vulkan display (" + error + "); drawing with GDI");

@@ -49,3 +49,7 @@ preview remains muted; no new mixer correction is claimed.
 
 [Start-sequence measurements and graphics equivalence](START-PERFORMANCE.md)
 cover the buffer-addressing and prebuilt transfer-pipeline optimization.
+
+## Optional FSR 1
+
+[FSR display tests, image checks and bounded race comparison](FSR-TEST.md).

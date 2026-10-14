@@ -11,3 +11,8 @@ Base commit: `56fc8dc37c78db249ac618da909426049991ab3a`.
 Game-port Git history is retained. The engine is vendored from its pinned revision, with local controls, graphics, performance and audio changes included. Both original MIT licences are preserved.
 
 Only authored runtime code, tooling, original procedural button art and address metadata are included. Generated translations, extracted game files, disc images, third-party texture replacements, settings and saves are excluded.
+
+AMD FSR 1 headers: https://github.com/GPUOpen-Effects/FidelityFX-FSR
+revision `a21ffb8f6c13233ba336352bdff293894c706575`. Original headers
+`ffx_a.h` and `ffx_fsr1.h` are vendored unchanged; AMD and Michal Drobot
+notices are retained in `engine/gpu/shaders/fsr/NOTICES.txt`.

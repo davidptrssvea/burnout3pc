@@ -54,13 +54,14 @@ FetchContent_MakeAvailable(glslang)
 set(PS2GPU_SHADER_DIR ${CMAKE_CURRENT_BINARY_DIR}/shaders)
 file(MAKE_DIRECTORY ${PS2GPU_SHADER_DIR})
 set(PS2GPU_SHADER_HEADERS)
-foreach(shader gs.vert gs.frag date.vert date.frag swizzle.comp decode.comp depth_load.frag patch.comp fxaa.comp)
+foreach(shader gs.vert gs.frag date.vert date.frag swizzle.comp decode.comp depth_load.frag patch.comp fxaa.comp fsr_easu.comp fsr_rcas.comp)
     string(REPLACE "." "_" name ${shader})
     set(out ${PS2GPU_SHADER_DIR}/${name}.h)
     add_custom_command(OUTPUT ${out}
         COMMAND glslang-standalone -V --target-env vulkan1.3 --vn spirv_${name}
                 -o ${out} ${CMAKE_CURRENT_LIST_DIR}/shaders/${shader}
         DEPENDS ${CMAKE_CURRENT_LIST_DIR}/shaders/${shader} ${CMAKE_CURRENT_LIST_DIR}/shaders/gs_address.glsl
+                ${CMAKE_CURRENT_LIST_DIR}/shaders/fsr/ffx_a.h ${CMAKE_CURRENT_LIST_DIR}/shaders/fsr/ffx_fsr1.h
                 glslang-standalone
         COMMENT "glslang ${shader}")
     list(APPEND PS2GPU_SHADER_HEADERS ${out})
@@ -121,3 +122,6 @@ target_link_libraries(ps2gpu_tests PRIVATE ps2gpu)
 
 add_executable(ps2gpu_af_bench ${CMAKE_CURRENT_LIST_DIR}/tests/af_bench.cpp)
 target_link_libraries(ps2gpu_af_bench PRIVATE ps2gpu)
+
+add_executable(ps2gpu_fsr_bench ${CMAKE_CURRENT_LIST_DIR}/tests/fsr_bench.cpp)
+target_link_libraries(ps2gpu_fsr_bench PRIVATE ps2gpu)

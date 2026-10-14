@@ -1,0 +1,25 @@
+#version 450
+#extension GL_GOOGLE_include_directive : require
+#define A_GPU 1
+#define A_GLSL 1
+#include "fsr/ffx_a.h"
+layout(local_size_x=8,local_size_y=8) in;
+layout(binding=0) uniform sampler2D sourceImage;
+layout(binding=1,rgba8) writeonly uniform image2D outputImage;
+layout(push_constant) uniform Params { uvec2 inputSize; float sharpness; } params;
+#define FSR_EASU_F 1
+AF4 FsrEasuRF(AF2 p) { return textureGather(sourceImage,p,0); }
+AF4 FsrEasuGF(AF2 p) { return textureGather(sourceImage,p,1); }
+AF4 FsrEasuBF(AF2 p) { return textureGather(sourceImage,p,2); }
+#include "fsr/ffx_fsr1.h"
+void main() {
+    uvec2 pos=gl_GlobalInvocationID.xy;
+    ivec2 size=imageSize(outputImage);
+    if(any(greaterThanEqual(pos,uvec2(size)))) return;
+    uvec4 c0,c1,c2,c3;
+    FsrEasuCon(c0,c1,c2,c3,float(params.inputSize.x),float(params.inputSize.y),
+              float(params.inputSize.x),float(params.inputSize.y),float(size.x),float(size.y));
+    vec3 color;
+    FsrEasuF(color,pos,c0,c1,c2,c3);
+    imageStore(outputImage,ivec2(pos),vec4(color,1.0));
+}

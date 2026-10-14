@@ -51,3 +51,9 @@ Based on Daniel Gomes Vieira's MIT-licensed burnout3-pc and ps2-port-engine.
 Upstream was developed with Claude; custom changes with Codex and David's
 playtesting. Retained licences: LICENSE.txt, ENGINE-LICENSE.txt and
 THIRD-PARTY-NOTICES.txt. No licence over the commercial game is granted.
+
+Optional FSR 1:
+Settings.exe: Upscaling = FSR 1, Internal Resolution = 2x, FSR Sharpness = 50%.
+Standard is the default. Lower resolution can improve performance at a loss of detail;
+FSR alone does not increase FPS. Aspect ratio and fullscreen remain in PC Settings.
+AMD shader notices are included in FSR-LICENSE.txt.

@@ -51,7 +51,9 @@ map.start=menu
 map.triangle=y
 map.up=up
 own_engine_volume=100
-resolution=display
+resolution=2x
+upscaling=off
+fsr_sharpness=50
 rumble_strength=100
 texture_pack=on
 trigger_threshold=10
@@ -64,6 +66,7 @@ xbox_prompts=on
         'Settings.exe': args.settings.read_bytes(),
         'THIRD-PARTY-NOTICES.txt': args.notices.read_bytes(),
         'LICENSE.txt': (ROOT / 'LICENSE').read_bytes(),
+        'FSR-LICENSE.txt': (ROOT / 'engine/gpu/shaders/fsr/NOTICES.txt').read_bytes(),
         'ENGINE-LICENSE.txt': (ROOT / 'engine/LICENSE').read_bytes(),
         'README.txt': (ROOT / 'games/burnout3/port/release/README-Xbox.txt').read_bytes(),
         'pc_settings.ini': config.encode(),

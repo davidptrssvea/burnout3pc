@@ -32,7 +32,8 @@ class ControlsForm : Form {
 
     readonly NumericUpDown rumble=new NumericUpDown(), threshold=new NumericUpDown();
 
-    readonly ComboBox aa=new ComboBox(), af=new ComboBox();
+    readonly ComboBox aa=new ComboBox(), af=new ComboBox(), resolution=new ComboBox(), upscaling=new ComboBox();
+    readonly NumericUpDown sharpness=new NumericUpDown();
 
     readonly CheckBox fps=new CheckBox();
 
@@ -44,7 +45,7 @@ class ControlsForm : Form {
 
     Label LabelAt(string text,int y) { var l=new Label { Text=text }; l.SetBounds(16,y,270,26); Controls.Add(l); return l; }
 
-    Button ButtonAt(string text,int x,int width,EventHandler click) { var b=new Button {Text=text}; b.SetBounds(x,753,width,38); b.Click+=click; Controls.Add(b); return b; }
+    Button ButtonAt(string text,int x,int width,EventHandler click) { var b=new Button {Text=text}; b.SetBounds(x,867,width,38); b.Click+=click; Controls.Add(b); return b; }
 
     int Percent(string key,int fallback) { int n; return int.TryParse(Get(key,""),out n)?Math.Max(0,Math.Min(100,n)):fallback; }
 
@@ -60,7 +61,7 @@ class ControlsForm : Form {
 
         }
 
-        Text="Burnout 3 – Controls and Graphics"; ClientSize=new Size(520,814);
+        Text="Burnout 3 – Controls and Graphics"; ClientSize=new Size(520,928);
 
         StartPosition=FormStartPosition.CenterScreen; FormBorderStyle=FormBorderStyle.FixedDialog;
 
@@ -104,17 +105,28 @@ class ControlsForm : Form {
 
         int afIndex=Array.IndexOf(afValues,Get("anisotropic","16x")); af.SelectedIndex=afIndex<0?4:afIndex; Controls.Add(af);
 
+        LabelAt("Internal Resolution",651); resolution.SetBounds(292,646,210,28);
+        resolution.DropDownStyle=ComboBoxStyle.DropDownList; resolution.Items.AddRange(new string[]{"1x (Faster)","2x","3x","4x"});
+        int resIndex=Array.IndexOf(new string[]{"1x","2x","3x","4x"},Get("resolution","2x")); resolution.SelectedIndex=resIndex<0?1:resIndex; Controls.Add(resolution);
+        LabelAt("Upscaling",687); upscaling.SetBounds(292,682,210,28);
+        upscaling.DropDownStyle=ComboBoxStyle.DropDownList; upscaling.Items.AddRange(new string[]{"Standard","FSR 1"});
+        upscaling.SelectedIndex=Get("upscaling","off")=="fsr1"?1:0; Controls.Add(upscaling);
+        LabelAt("FSR Sharpness (%)",723); sharpness.SetBounds(292,718,90,28);
+        sharpness.Minimum=0; sharpness.Maximum=100; sharpness.Value=Percent("fsr_sharpness",50); Controls.Add(sharpness);
+        sharpness.Enabled=upscaling.SelectedIndex==1;
+        upscaling.SelectedIndexChanged+=delegate { sharpness.Enabled=upscaling.SelectedIndex==1; };
+
         fps.Text="Show FPS Counter (F10 toggles in game)";
 
-        fps.SetBounds(16,648,485,26); fps.Checked=Get("fps_counter","on")=="on"; Controls.Add(fps);
+        fps.SetBounds(16,762,485,26); fps.Checked=Get("fps_counter","on")=="on"; Controls.Add(fps);
 
         prompts.Text="Button Prompts Follow Xbox Mapping";
 
-        prompts.SetBounds(16,682,485,26); prompts.Checked=Get("xbox_prompts","on")=="on"; Controls.Add(prompts);
+        prompts.SetBounds(16,796,485,26); prompts.Checked=Get("xbox_prompts","on")=="on"; Controls.Add(prompts);
 
         performance.Text="Performance Mode (Faster Game Calculations)";
 
-        performance.SetBounds(16,716,485,26); performance.Checked=Get("vu_fast","off")=="on"; Controls.Add(performance);
+        performance.SetBounds(16,830,485,26); performance.Checked=Get("vu_fast","off")=="on"; Controls.Add(performance);
 
         ButtonAt("Original",16,130,delegate { Profile(original,25); });
 
@@ -162,6 +174,9 @@ class ControlsForm : Form {
 
             settings["aa"]=aa.SelectedIndex==1?"fxaa":"off"; settings["anisotropic"]=afValues[af.SelectedIndex];
 
+            settings["resolution"]=new string[]{"1x","2x","3x","4x"}[resolution.SelectedIndex];
+            settings["upscaling"]=upscaling.SelectedIndex==1?"fsr1":"off";
+            settings["fsr_sharpness"]=sharpness.Value.ToString();
             settings["fps_counter"]=fps.Checked?"on":"off";
 
             settings["xbox_prompts"]=prompts.Checked?"on":"off";

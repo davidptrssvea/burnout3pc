@@ -17,6 +17,8 @@
 
 #include "gpu_internal.h"
 #include "fxaa_comp.h"
+#include "fsr_easu_comp.h"
+#include "fsr_rcas_comp.h"
 
 #include <algorithm>
 #ifdef _WIN32
@@ -69,6 +71,26 @@ public:
     bool EnsureFxaa(std::uint32_t width,std::uint32_t height);
     void DestroyFxaa();
     VkImage ApplyFxaa(VkImage source,std::uint32_t width,std::uint32_t height);
+    void SetFsr(bool enabled,float sharpness) override { fsr_enabled_.store(enabled); fsr_sharpness_.store(std::clamp(sharpness,0.0f,1.0f)); }
+    bool EnsureFsr(std::uint32_t width,std::uint32_t height,std::uint32_t outWidth,std::uint32_t outHeight);
+    void DestroyFsr();
+    bool ReadProcessed(std::vector<std::uint32_t>* pixels,std::uint32_t* width,std::uint32_t* height) override;
+    VkImage processed_image_=VK_NULL_HANDLE;
+    std::uint32_t processed_width_=0,processed_height_=0;
+    VkImage ApplyFsr(VkImage source,std::uint32_t width,std::uint32_t height,std::uint32_t outWidth,std::uint32_t outHeight);
+    std::atomic<bool> fsr_enabled_{false};
+    std::atomic<float> fsr_sharpness_{0.5f};
+    VkImage fsr_images_[3]={};
+    VkDeviceMemory fsr_memory_[3]={};
+    VkImageView fsr_views_[3]={};
+    VkDescriptorSetLayout fsr_set_layout_=VK_NULL_HANDLE;
+    VkDescriptorPool fsr_pool_=VK_NULL_HANDLE;
+    VkDescriptorSet fsr_set_[2]={};
+    VkPipelineLayout fsr_layout_=VK_NULL_HANDLE;
+    VkPipeline fsr_pipeline_[2]={};
+    VkSampler fsr_sampler_=VK_NULL_HANDLE;
+    std::uint32_t fsr_width_=0,fsr_height_=0,fsr_out_width_=0,fsr_out_height_=0;
+    bool fsr_initialized_=false;
     std::atomic<bool> fxaa_enabled_{false};
     VkImage aa_images_[2] = {};
     VkDeviceMemory aa_memory_[2] = {};
@@ -750,6 +772,138 @@ bool VulkanDisplay::EnsureFxaa(std::uint32_t width,std::uint32_t height) {
     return true;
 }
 
+void VulkanDisplay::DestroyFsr() {
+    if(!device_) return;
+    for(auto pipeline:fsr_pipeline_) if(pipeline) vkDestroyPipeline(device_,pipeline,nullptr);
+    if(fsr_layout_) vkDestroyPipelineLayout(device_,fsr_layout_,nullptr);
+    if(fsr_pool_) vkDestroyDescriptorPool(device_,fsr_pool_,nullptr);
+    if(fsr_set_layout_) vkDestroyDescriptorSetLayout(device_,fsr_set_layout_,nullptr);
+    if(fsr_sampler_) vkDestroySampler(device_,fsr_sampler_,nullptr);
+    for(int i=0;i<3;++i) {
+        if(fsr_views_[i]) vkDestroyImageView(device_,fsr_views_[i],nullptr);
+        if(fsr_images_[i]) vkDestroyImage(device_,fsr_images_[i],nullptr);
+        if(fsr_memory_[i]) vkFreeMemory(device_,fsr_memory_[i],nullptr);
+        fsr_views_[i]=VK_NULL_HANDLE; fsr_images_[i]=VK_NULL_HANDLE; fsr_memory_[i]=VK_NULL_HANDLE;
+    }
+    fsr_pipeline_[0]=fsr_pipeline_[1]=VK_NULL_HANDLE; fsr_layout_=VK_NULL_HANDLE;
+    fsr_pool_=VK_NULL_HANDLE; fsr_set_layout_=VK_NULL_HANDLE;
+    fsr_sampler_=VK_NULL_HANDLE; fsr_set_[0]=fsr_set_[1]=VK_NULL_HANDLE;
+    fsr_width_=fsr_height_=0; fsr_initialized_=false;
+}
+
+bool VulkanDisplay::EnsureFsr(std::uint32_t width,std::uint32_t height,std::uint32_t outWidth,std::uint32_t outHeight) {
+    if(fsr_pipeline_[0] && fsr_width_==width && fsr_height_==height && fsr_out_width_==outWidth && fsr_out_height_==outHeight) return true;
+    { std::lock_guard<std::mutex> hold(g_queue_lock); vkDeviceWaitIdle(device_); }
+    DestroyFsr();
+    auto checked=[&](VkResult result,const char* name) {
+        if(Check(result,name)) return true;
+        DestroyFsr(); return false;
+    };
+    for(int i=0;i<3;++i) {
+        VkImageCreateInfo ici{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
+        ici.imageType=VK_IMAGE_TYPE_2D; ici.format=VK_FORMAT_R8G8B8A8_UNORM;
+        ici.extent=i ? VkExtent3D{outWidth,outHeight,1} : VkExtent3D{width,height,1}; ici.mipLevels=1; ici.arrayLayers=1;
+        ici.samples=VK_SAMPLE_COUNT_1_BIT; ici.tiling=VK_IMAGE_TILING_OPTIMAL;
+        ici.usage=i ? VK_IMAGE_USAGE_STORAGE_BIT|VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT :
+                      VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+        if(!checked(vkCreateImage(device_,&ici,nullptr,&fsr_images_[i]),"FSR 1 image")) return false;
+        VkMemoryRequirements req; vkGetImageMemoryRequirements(device_,fsr_images_[i],&req);
+        VkMemoryAllocateInfo mai{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
+        mai.allocationSize=req.size; mai.memoryTypeIndex=FindMemory(req.memoryTypeBits,VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+        if(!checked(vkAllocateMemory(device_,&mai,nullptr,&fsr_memory_[i]),"FSR 1 memory")) return false;
+        if(!checked(vkBindImageMemory(device_,fsr_images_[i],fsr_memory_[i],0),"FSR 1 bind")) return false;
+        VkImageViewCreateInfo vi{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
+        vi.image=fsr_images_[i]; vi.viewType=VK_IMAGE_VIEW_TYPE_2D; vi.format=ici.format;
+        vi.subresourceRange={VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1};
+        if(!checked(vkCreateImageView(device_,&vi,nullptr,&fsr_views_[i]),"FSR 1 view")) return false;
+    }
+    VkSamplerCreateInfo sci{VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO};
+    sci.magFilter=sci.minFilter=VK_FILTER_LINEAR;
+    sci.addressModeU=sci.addressModeV=sci.addressModeW=VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    if(!checked(vkCreateSampler(device_,&sci,nullptr,&fsr_sampler_),"FSR 1 sampler")) return false;
+    VkDescriptorSetLayoutBinding bindings[2]={
+        {0,VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,1,VK_SHADER_STAGE_COMPUTE_BIT,nullptr},
+        {1,VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,1,VK_SHADER_STAGE_COMPUTE_BIT,nullptr}};
+    VkDescriptorSetLayoutCreateInfo dli{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
+    dli.bindingCount=2; dli.pBindings=bindings;
+    if(!checked(vkCreateDescriptorSetLayout(device_,&dli,nullptr,&fsr_set_layout_),"FSR 1 descriptors")) return false;
+    VkDescriptorPoolSize sizes[2]={{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,2},{VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,2}};
+    VkDescriptorPoolCreateInfo dpi{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
+    dpi.maxSets=2; dpi.poolSizeCount=2; dpi.pPoolSizes=sizes;
+    if(!checked(vkCreateDescriptorPool(device_,&dpi,nullptr,&fsr_pool_),"FSR 1 pool")) return false;
+    for(int pass=0;pass<2;++pass) {
+        VkDescriptorSetAllocateInfo dai{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
+        dai.descriptorPool=fsr_pool_; dai.descriptorSetCount=1; dai.pSetLayouts=&fsr_set_layout_;
+        if(!checked(vkAllocateDescriptorSets(device_,&dai,&fsr_set_[pass]),"FSR set")) return false;
+        VkDescriptorImageInfo infos[2]={{fsr_sampler_,fsr_views_[pass],VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
+                                       {VK_NULL_HANDLE,fsr_views_[pass+1],VK_IMAGE_LAYOUT_GENERAL}};
+        VkWriteDescriptorSet writes[2]{};
+        for(int i=0;i<2;++i) {
+            writes[i].sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            writes[i].dstSet=fsr_set_[pass]; writes[i].dstBinding=i; writes[i].descriptorCount=1;
+            writes[i].descriptorType=bindings[i].descriptorType; writes[i].pImageInfo=&infos[i];
+        }
+        vkUpdateDescriptorSets(device_,2,writes,0,nullptr);
+    }
+    VkPipelineLayoutCreateInfo pli{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
+    VkPushConstantRange push{VK_SHADER_STAGE_COMPUTE_BIT,0,12};
+    pli.pushConstantRangeCount=1; pli.pPushConstantRanges=&push;
+    pli.setLayoutCount=1; pli.pSetLayouts=&fsr_set_layout_;
+    if(!checked(vkCreatePipelineLayout(device_,&pli,nullptr,&fsr_layout_),"FSR 1 layout")) return false;
+    for(int pass=0;pass<2;++pass) {
+        VkShaderModuleCreateInfo smi{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
+        smi.codeSize=pass ? sizeof(spirv_fsr_rcas_comp) : sizeof(spirv_fsr_easu_comp);
+        smi.pCode=pass ? spirv_fsr_rcas_comp : spirv_fsr_easu_comp;
+        VkShaderModule module=VK_NULL_HANDLE;
+        if(!checked(vkCreateShaderModule(device_,&smi,nullptr,&module),"FSR shader")) return false;
+        VkComputePipelineCreateInfo ci{VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
+        ci.stage={VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,nullptr,0,VK_SHADER_STAGE_COMPUTE_BIT,module,"main",nullptr};
+        ci.layout=fsr_layout_;
+        const auto result=vkCreateComputePipelines(device_,VK_NULL_HANDLE,1,&ci,nullptr,&fsr_pipeline_[pass]);
+        vkDestroyShaderModule(device_,module,nullptr);
+        if(!checked(result,"FSR pipeline")) return false;
+    }
+    fsr_out_width_=outWidth; fsr_out_height_=outHeight;
+    fsr_width_=width; fsr_height_=height;
+    std::fprintf(stderr,"[display] FSR 1 EASU + RCAS: %ux%u -> %ux%u\n",width,height,outWidth,outHeight);
+    return true;
+}
+
+VkImage VulkanDisplay::ApplyFsr(VkImage source,std::uint32_t width,std::uint32_t height,std::uint32_t outWidth,std::uint32_t outHeight) {
+    if(!EnsureFsr(width,height,outWidth,outHeight)) {
+        std::fprintf(stderr,"[display] FSR unavailable; using ordinary scaling\n");
+        fsr_enabled_.store(false); return source;
+    }
+    Barrier(cmd_,fsr_images_[0],fsr_initialized_?VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL:VK_IMAGE_LAYOUT_UNDEFINED,
+            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,fsr_initialized_?VK_ACCESS_SHADER_READ_BIT:0,VK_ACCESS_TRANSFER_WRITE_BIT,
+            fsr_initialized_?VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT:VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT);
+    VkImageBlit blit{};
+    blit.srcSubresource=blit.dstSubresource={VK_IMAGE_ASPECT_COLOR_BIT,0,0,1};
+    blit.srcOffsets[1]=blit.dstOffsets[1]={int(width),int(height),1};
+    vkCmdBlitImage(cmd_,source,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,fsr_images_[0],VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,1,&blit,VK_FILTER_NEAREST);
+    Barrier(cmd_,fsr_images_[0],VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            VK_ACCESS_TRANSFER_WRITE_BIT,VK_ACCESS_SHADER_READ_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+    struct Params { std::uint32_t w,h; float sharpness; } params{width,height,fsr_sharpness_.load()};
+    for(int pass=0;pass<2;++pass) {
+        const auto old=pass ? VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        const auto access=pass ? VK_ACCESS_TRANSFER_READ_BIT : VK_ACCESS_SHADER_READ_BIT;
+        const auto stage=pass ? VK_PIPELINE_STAGE_TRANSFER_BIT : VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+        Barrier(cmd_,fsr_images_[pass+1],fsr_initialized_?old:VK_IMAGE_LAYOUT_UNDEFINED,VK_IMAGE_LAYOUT_GENERAL,
+                fsr_initialized_?access:0,VK_ACCESS_SHADER_WRITE_BIT,
+                fsr_initialized_?stage:VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+        vkCmdBindPipeline(cmd_,VK_PIPELINE_BIND_POINT_COMPUTE,fsr_pipeline_[pass]);
+        vkCmdBindDescriptorSets(cmd_,VK_PIPELINE_BIND_POINT_COMPUTE,fsr_layout_,0,1,&fsr_set_[pass],0,nullptr);
+        vkCmdPushConstants(cmd_,fsr_layout_,VK_SHADER_STAGE_COMPUTE_BIT,0,sizeof(params),&params);
+        vkCmdDispatch(cmd_,(outWidth+7)/8,(outHeight+7)/8,1);
+        Barrier(cmd_,fsr_images_[pass+1],VK_IMAGE_LAYOUT_GENERAL,
+                pass?VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL:VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                VK_ACCESS_SHADER_WRITE_BIT,pass?VK_ACCESS_TRANSFER_READ_BIT:VK_ACCESS_SHADER_READ_BIT,
+                VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,pass?VK_PIPELINE_STAGE_TRANSFER_BIT:VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+    }
+    fsr_initialized_=true;
+    return fsr_images_[2];
+}
+
 VkImage VulkanDisplay::ApplyFxaa(VkImage source,std::uint32_t width,std::uint32_t height) {
     if(!EnsureFxaa(width,height)) {
         std::fprintf(stderr,"[display] FXAA unavailable; keeping unfiltered output\n");
@@ -776,6 +930,57 @@ VkImage VulkanDisplay::ApplyFxaa(VkImage source,std::uint32_t width,std::uint32_
     return aa_images_[1];
 }
 
+bool VulkanDisplay::ReadProcessed(std::vector<std::uint32_t>* pixels,std::uint32_t* width,std::uint32_t* height) {
+    if(!pixels || !width || !height) return false;
+    std::lock_guard<std::mutex> hold(present_lock_);
+    std::lock_guard<std::mutex> queue(g_queue_lock);
+    if(!processed_image_ || (processed_image_!=picture_ && processed_image_!=aa_images_[1] && processed_image_!=fsr_images_[2])) return false;
+    if(!Check(vkDeviceWaitIdle(device_),"readback wait")) return false;
+    // The plain software-upload picture is BGRA; FXAA and FSR are RGBA.
+    const bool bgra=processed_image_==picture_;
+    VkBuffer buffer=VK_NULL_HANDLE;
+    VkDeviceMemory memory=VK_NULL_HANDLE;
+    VkCommandBuffer command=VK_NULL_HANDLE;
+    auto cleanup=[&] {
+        if(command) vkFreeCommandBuffers(device_,pool_,1,&command);
+        if(buffer) vkDestroyBuffer(device_,buffer,nullptr);
+        if(memory) vkFreeMemory(device_,memory,nullptr);
+    };
+    const VkDeviceSize bytes=VkDeviceSize(processed_width_)*processed_height_*4;
+    VkBufferCreateInfo bi{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
+    bi.size=bytes; bi.usage=VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+    if(!Check(vkCreateBuffer(device_,&bi,nullptr,&buffer),"readback buffer")) { cleanup(); return false; }
+    VkMemoryRequirements req; vkGetBufferMemoryRequirements(device_,buffer,&req);
+    VkMemoryAllocateInfo mi{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
+    mi.allocationSize=req.size; mi.memoryTypeIndex=FindMemory(req.memoryTypeBits,VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT|VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+    if(!Check(vkAllocateMemory(device_,&mi,nullptr,&memory),"readback memory") || !Check(vkBindBufferMemory(device_,buffer,memory,0),"readback bind")) { cleanup(); return false; }
+    VkCommandBufferAllocateInfo ai{VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
+    ai.commandPool=pool_; ai.level=VK_COMMAND_BUFFER_LEVEL_PRIMARY; ai.commandBufferCount=1;
+    if(!Check(vkAllocateCommandBuffers(device_,&ai,&command),"readback command")) { cleanup(); return false; }
+    VkCommandBufferBeginInfo begin{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+    begin.flags=VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    if(!Check(vkBeginCommandBuffer(command,&begin),"readback begin")) { cleanup(); return false; }
+    Barrier(command,processed_image_,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+            VK_ACCESS_MEMORY_WRITE_BIT,VK_ACCESS_TRANSFER_READ_BIT,VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT);
+    VkBufferImageCopy copy{};
+    copy.imageSubresource={VK_IMAGE_ASPECT_COLOR_BIT,0,0,1}; copy.imageExtent={processed_width_,processed_height_,1};
+    vkCmdCopyImageToBuffer(command,processed_image_,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,buffer,1,&copy);
+    VkMemoryBarrier visible{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
+    visible.srcAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT; visible.dstAccessMask=VK_ACCESS_HOST_READ_BIT;
+    vkCmdPipelineBarrier(command,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_HOST_BIT,0,1,&visible,0,nullptr,0,nullptr);
+    if(!Check(vkEndCommandBuffer(command),"readback end")) { cleanup(); return false; }
+    VkSubmitInfo submit{VK_STRUCTURE_TYPE_SUBMIT_INFO}; submit.commandBufferCount=1; submit.pCommandBuffers=&command;
+    if(!Check(vkQueueSubmit(queue_,1,&submit,VK_NULL_HANDLE),"readback submit") || !Check(vkQueueWaitIdle(queue_),"readback ready")) { cleanup(); return false; }
+    void* data=nullptr;
+    if(!Check(vkMapMemory(device_,memory,0,bytes,0,&data),"readback map")) { cleanup(); return false; }
+    pixels->resize(std::size_t(processed_width_)*processed_height_);
+    std::memcpy(pixels->data(),data,std::size_t(bytes));
+    if(bgra) for(auto& pixel:*pixels) pixel=(pixel&0xff00ff00u)|((pixel&0xffu)<<16)|((pixel>>16)&0xffu);
+    vkUnmapMemory(device_,memory);
+    *width=processed_width_; *height=processed_height_;
+    cleanup(); return true;
+}
+
 bool VulkanDisplay::FinishPresent(std::uint32_t index, VkImage source, std::uint32_t width, std::uint32_t height) {
     if(fxaa_enabled_.load()) source=ApplyFxaa(source,width,height);
     const VkImage target = images_[index];
@@ -793,6 +998,11 @@ bool VulkanDisplay::FinishPresent(std::uint32_t index, VkImage source, std::uint
         if (float(w) > float(h) * aspect) dw = std::int32_t(float(h) * aspect + 0.5f);
         else dh = std::int32_t(float(w) / aspect + 0.5f);
     }
+    if(fsr_enabled_.load() && dw>0 && dh>0 && (std::uint32_t(dw)>width || std::uint32_t(dh)>height)) {
+        const auto filtered=ApplyFsr(source,width,height,std::uint32_t(dw),std::uint32_t(dh));
+        if(filtered!=source) { source=filtered; width=dw; height=dh; }
+    }
+    processed_image_=source; processed_width_=width; processed_height_=height;
     const std::int32_t x0 = (w - dw) / 2, y0 = (h - dh) / 2;
     shown_x0_.store(x0);
     shown_y0_.store(y0);
@@ -1417,6 +1627,7 @@ VulkanDisplay::~VulkanDisplay() {
     if (device_) vkDeviceWaitIdle(device_);
     DestroyPaced();
     DestroyFxaa();
+    DestroyFsr();
     if (copy_pool_) vkDestroyCommandPool(device_, copy_pool_, nullptr);
     DestroyPicture();
     if (overlay_buffer_) vkDestroyBuffer(device_, overlay_buffer_, nullptr);
